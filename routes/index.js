@@ -1,26 +1,27 @@
-var express = require('express');
-var router = express.Router();
-var Promise = require('bluebird');
-var AppError = require('../core/app-error');
-var middleware = require('../core/middleware');
-var ClientManager = require('../core/services/client-manager');
-var _ = require('lodash');
-var log4js = require('log4js');
-var log = log4js.getLogger("cps:index");
+const express = require('express');
+const router = express.Router();
+const Promise = require('bluebird');
+const base64 = require('base-64');
+const AppError = require('../core/app-error');
+const middleware = require('../core/middleware');
+const ClientManager = require('../core/services/client-manager');
+const _ = require('lodash');
+const log4js = require('log4js');
+const log = log4js.getLogger("cps:index");
 
 router.get('/', (req, res, next) => {
   res.render('index', { title: 'CodePushServer' });
 });
 
 router.get('/README.md', (req, res, next) => {
-  var MarkdownIt = require('markdown-it');
+  const MarkdownIt = require('markdown-it');
   const path = require('path');
   const fs = require('fs');
   const readFile = Promise.promisify(fs.readFile);
   const README = path.join(__dirname, '../README.md');
   readFile(README, { encoding: 'utf8' })
   .then(source => {
-    var md = new MarkdownIt();
+    const md = new MarkdownIt();
     res.send(md.render(source));
   })
   .catch(e=>{
@@ -37,45 +38,53 @@ router.get('/tokens', (req, res) => {
 });
 
 router.get('/updateCheck', (req, res, next) => {
-  var deploymentKey = _.get(req, "query.deploymentKey");
-  var appVersion = _.get(req, "query.appVersion");
-  var label = _.get(req, "query.label");
-  var packageHash = _.get(req, "query.packageHash")
-  var clientUniqueId = _.get(req, "query.clientUniqueId")
-  var clientManager = new ClientManager();
+  const deploymentKey = _.get(req, "query.deploymentKey");
+  const appVersion = _.get(req, "query.appVersion");
+  const label = _.get(req, "query.label");
+  const packageHash = _.get(req, "query.packageHash");
+  const clientUniqueId = _.get(req, "query.clientUniqueId");
+  let extraInfo;
+  const extraString = _.get(req, "query.extraInfo")
+  try{
+    extraInfo = JSON.parse(base64.decode(extraString));
+  } catch (e){
+    extraInfo = {};
+  }
+  const clientManager = new ClientManager();
   log.debug('req.query', req.query);
-  clientManager.updateCheckFromCache(deploymentKey, appVersion, label, packageHash, clientUniqueId)
-  .then((rs) => {
-    //灰度检测
-    return clientManager.chosenMan(rs.packageId, rs.rollout, clientUniqueId)
-    .then((data)=>{
-      if (!data) {
-        rs.isAvailable = false;
-        return rs;
+  // 检测extraInfo
+  clientManager.updateCheckFromCache(deploymentKey, appVersion, label, packageHash, clientUniqueId, extraInfo)
+    .then((rs) => {
+      //灰度检测
+      return clientManager.chosenMan(rs.packageId, rs.rollout, clientUniqueId)
+        .then((data)=>{
+          if (!data) {
+            rs.isAvailable = false;
+            return rs;
+          }
+          return rs;
+        });
+    })
+    .then((rs) => {
+      delete rs.packageId;
+      delete rs.rollout;
+      res.send({"updateInfo":rs});
+    })
+    .catch((e) => {
+      if (e instanceof AppError.AppError) {
+        res.status(404).send(e.message);
+      } else {
+        next(e);
       }
-      return rs;
     });
-  })
-  .then((rs) => {
-    delete rs.packageId;
-    delete rs.rollout;
-    res.send({"updateInfo":rs});
-  })
-  .catch((e) => {
-    if (e instanceof AppError.AppError) {
-      res.status(404).send(e.message);
-    } else {
-      next(e);
-    }
-  });
 });
 
 router.post('/reportStatus/download', (req, res) => {
   log.debug('req.body', req.body);
-  var clientUniqueId = _.get(req, "body.clientUniqueId");
-  var label = _.get(req, "body.label");
-  var deploymentKey = _.get(req, "body.deploymentKey");
-  var clientManager = new ClientManager();
+  const clientUniqueId = _.get(req, "body.clientUniqueId");
+  const label = _.get(req, "body.label");
+  const deploymentKey = _.get(req, "body.deploymentKey");
+  const clientManager = new ClientManager();
   clientManager.reportStatusDownload(deploymentKey, label, clientUniqueId)
   .catch((err) => {
     if (!err instanceof AppError.AppError) {
@@ -87,10 +96,10 @@ router.post('/reportStatus/download', (req, res) => {
 
 router.post('/reportStatus/deploy', (req, res) => {
   log.debug('req.body', req.body);
-  var clientUniqueId = _.get(req, "body.clientUniqueId");
-  var label = _.get(req, "body.label");
-  var deploymentKey = _.get(req, "body.deploymentKey");
-  var clientManager = new ClientManager();
+  const clientUniqueId = _.get(req, "body.clientUniqueId");
+  const label = _.get(req, "body.label");
+  const deploymentKey = _.get(req, "body.deploymentKey");
+  const clientManager = new ClientManager();
   clientManager.reportStatusDeploy(deploymentKey, label, clientUniqueId, req.body)
   .catch((err) => {
     if (!err instanceof AppError.AppError) {

@@ -1,13 +1,14 @@
 var os = require('os');
+var path = require('path');
 
 var config = {};
 config.development = {
   // Config for database, only support mysql.
   db: {
     username: process.env.RDS_USERNAME || "root",
-    password: process.env.RDS_PASSWORD || null,
+    password: process.env.RDS_PASSWORD || "123456",
     database: process.env.DATA_BASE || "codepush",
-    host: process.env.RDS_HOST || "127.0.0.1",
+    host: process.env.RDS_HOST || "12.12.12.120",
     port: process.env.RDS_PORT || 3306,
     dialect: "mysql",
     logging: false,
@@ -57,7 +58,7 @@ config.development = {
   // Config for local storage when storageType value is "local".
   local: {
     // Binary files storage dir, Do not use tmpdir and it's public download dir.
-    storageDir: process.env.STORAGE_DIR || "/Users/tablee/workspaces/storage",
+    storageDir: process.env.STORAGE_DIR || path.resolve("./tablee/workspaces/storage"),
     // Binary files download host address which Code Push Server listen to. the files storage in storageDir.
     downloadUrl: process.env.LOCAL_DOWNLOAD_URL || "http://127.0.0.1:3000/download",
     // public static download spacename.

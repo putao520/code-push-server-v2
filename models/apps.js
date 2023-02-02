@@ -1,7 +1,7 @@
 "use strict";
 
 module.exports = function(sequelize, DataTypes) {
-  var Apps = sequelize.define("Apps", {
+  return sequelize.define("Apps", {
     id: {
       type: DataTypes.INTEGER(10),
       allowNull: false,
@@ -20,5 +20,4 @@ module.exports = function(sequelize, DataTypes) {
     underscored: true,
     paranoid: true,
   });
-  return Apps;
 };

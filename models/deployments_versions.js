@@ -1,7 +1,7 @@
 "use strict";
 
 module.exports = function(sequelize, DataTypes) {
-  var DeploymentsVersions = sequelize.define("DeploymentsVersions", {
+  return sequelize.define("DeploymentsVersions", {
     id: {
       type: DataTypes.INTEGER(10),
       allowNull: false,
@@ -20,6 +20,4 @@ module.exports = function(sequelize, DataTypes) {
     underscored: true,
     paranoid: true
   });
-
-  return DeploymentsVersions;
 };

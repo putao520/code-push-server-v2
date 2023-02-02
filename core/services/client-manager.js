@@ -9,6 +9,8 @@ var config    = require('../config');
 var log4js = require('log4js');
 var log = log4js.getLogger("cps:ClientManager");
 var Sequelize = require('sequelize');
+const fs = require('fs');
+const path = require("path");
 
 var proto = module.exports = function (){
   function ClientManager() {
@@ -42,11 +44,11 @@ proto.clearUpdateCheckCache = function(deploymentKey, appVersion, label, package
   .finally(() => client.quit());
 }
 
-proto.updateCheckFromCache = function(deploymentKey, appVersion, label, packageHash, clientUniqueId) {
+proto.updateCheckFromCache = function(deploymentKey, appVersion, label, packageHash, clientUniqueId, extraInfo) {
   const self = this;
   var updateCheckCache = _.get(config, 'common.updateCheckCache', false);
   if (updateCheckCache === false) {
-    return self.updateCheck(deploymentKey, appVersion, label, packageHash);
+    return self.updateCheck(deploymentKey, appVersion, label, packageHash, null, extraInfo);
   }
   let redisCacheKey = self.getUpdateCheckCacheKey(deploymentKey, appVersion, label, packageHash);
   var client = factory.getRedisClient("default");
@@ -60,7 +62,7 @@ proto.updateCheckFromCache = function(deploymentKey, appVersion, label, packageH
       } catch (e) {
       }
     }
-    return self.updateCheck(deploymentKey, appVersion, label, packageHash, clientUniqueId)
+    return self.updateCheck(deploymentKey, appVersion, label, packageHash, clientUniqueId, extraInfo)
     .then((rs) => {
       try {
         log.debug('updateCheckFromCache read from db');
@@ -118,7 +120,7 @@ proto.chosenMan = function (packageId, rollout, clientUniqueId) {
   }
 }
 
-proto.updateCheck = function(deploymentKey, appVersion, label, packageHash, clientUniqueId) {
+proto.updateCheck = function(deploymentKey, appVersion, label, packageHash, clientUniqueId, extraInfo) {
   var rs = {
     packageId: 0,
     downloadURL: "",
@@ -150,8 +152,7 @@ proto.updateCheck = function(deploymentKey, appVersion, label, packageHash, clie
       deployment_id: dep.id,
       min_version: { [Sequelize.Op.lte]: version },
       max_version: { [Sequelize.Op.gt]: version }
-    }})
-    .then((deploymentsVersionsMore) => {
+    }}).then((deploymentsVersionsMore) => {
       var distance = 0;
       var item = null;
       _.map(deploymentsVersionsMore, function(value, index) {
@@ -166,11 +167,31 @@ proto.updateCheck = function(deploymentKey, appVersion, label, packageHash, clie
         }
       });
       log.debug(item);
-      return item;
+      return {
+        deploymentsVersions: item,
+        deployment: dep
+      };
     });
-  })
-  .then((deploymentsVersions) => {
-    var packageId = _.get(deploymentsVersions, 'current_package_id', 0);
+  }).then((result) => {
+    return models.apps.findOne({where: {id: result.deployment.appid}}).then(app=>{
+      return {
+        deploymentsVersions: result.deploymentsVersions,
+        deployment: result.deployment,
+        app: app
+      }
+    })
+  }).then((result) => {
+    const deploymentsVersions = result.deploymentsVersions;
+    const appName = result.app.name;
+    // 根据输入信息和脚本输出的 regionName，获得包id
+    const scriptPath = path.resolve(__dirname, `../../script/${appName}.js`);
+    if( fs.existsSync(scriptPath) ){
+      const script = require(scriptPath);
+      const regionName = script.updateCheck(appVersion, extraInfo)
+      return models.Packages.findOne({where: {deployment_version_id: deploymentsVersions.id, region: regionName}})
+    }
+    // 原始逻辑
+    const packageId = _.get(deploymentsVersions, 'current_package_id', 0);
     if (_.eq(packageId, 0) ) {
       return;
     }
@@ -183,9 +204,9 @@ proto.updateCheck = function(deploymentKey, appVersion, label, packageHash, clie
         rs.targetBinaryRange = deploymentsVersions.app_version;
         rs.downloadUrl = rs.downloadURL = common.getBlobDownloadUrl(_.get(packages, 'blob_url'));
         rs.description = _.get(packages, 'description', '');
-        rs.isAvailable = _.eq(packages.is_disabled, 1) ? false : true;
-        rs.isDisabled = _.eq(packages.is_disabled, 1) ? true : false;
-        rs.isMandatory = _.eq(packages.is_mandatory, 1) ? true : false;
+        rs.isAvailable = !_.eq(packages.is_disabled, 1);
+        rs.isDisabled = _.eq(packages.is_disabled, 1);
+        rs.isMandatory = _.eq(packages.is_mandatory, 1);
         rs.appVersion = appVersion;
         rs.packageHash = _.get(packages, 'package_hash', '');
         rs.label = _.get(packages, 'label', '');

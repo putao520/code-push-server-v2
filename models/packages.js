@@ -12,6 +12,7 @@ module.exports = function(sequelize, DataTypes) {
     deployment_id: DataTypes.INTEGER(10),
     description: DataTypes.STRING,
     package_hash: DataTypes.STRING,
+    region: DataTypes.STRING,
     blob_url: DataTypes.STRING,
     size: DataTypes.INTEGER(10),
     manifest_blob_url: DataTypes.STRING,

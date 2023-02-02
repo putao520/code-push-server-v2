@@ -8,6 +8,7 @@ var AppError = function (msg, constr) {
   this.message = msg || 'Error'
   this.name = 'AppError'
   this.status = 200
+  return this
 }
 util.inherits(AppError, Error)
 

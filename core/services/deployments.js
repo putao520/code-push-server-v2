@@ -92,6 +92,11 @@ proto.findDeloymentByName = function (deploymentName, appId) {
   });
 };
 
+proto.findDeloymentByDeploymentKey = function (deploymentKey) {
+  log.debug(`findDeloymentByDeploymentKey deploymentKey:${deploymentKey}`);
+  return models.Deployments.findOne({where: {deployment_key: deploymentKey}});
+};
+
 proto.findPackagesAndOtherInfos = function (packageId) {
   return models.Packages.findOne({
     where: {id: packageId}
@@ -130,6 +135,10 @@ proto.findDeloymentsPackages = function (deploymentsVersionsId) {
     }
     return null;
   });
+};
+
+proto.findDeloymentsPackagesAndRegion = function (deploymentsVersionsId, regionName) {
+  return models.Packages.findOne({deployment_version_id: deploymentsVersionsId, region: regionName})
 };
 
 proto.formatPackage = function(packageVersion) {
@@ -177,6 +186,17 @@ proto.listDeloyment = function (deploymentInfo) {
     key: deploymentInfo.deployment_key,
     name: deploymentInfo.name,
     package: self.findDeloymentsPackages([deploymentInfo.last_deployment_version_id]).then(self.formatPackage)
+  });
+}
+
+proto.listDeloymentAndRegion = function (deploymentInfo, regionName) {
+  const self = this;
+  return Promise.props({
+    createdTime: parseInt(moment(deploymentInfo.created_at).format('x')),
+    id: `${deploymentInfo.id}`,
+    key: deploymentInfo.deployment_key,
+    name: deploymentInfo.name,
+    package: self.findDeloymentsPackagesAndRegion([deploymentInfo.last_deployment_version_id], regionName).then(self.formatPackage)
   });
 }
 
@@ -228,4 +248,21 @@ proto.deleteDeploymentHistory = function(deploymentId) {
   });
 }
 
-
+proto.deleteDeploymentRegion = function(deploymentId, regionName) {
+  return models.sequelize.transaction((t) => {
+    return Promise.all([
+      models.Packages.findAll({where: {deployment_id: deploymentId, region: regionName}, order: [['id','desc']], limit: 1000})
+        .then((rs) => {
+          return Promise.map(rs, (v) => {
+            return v.destroy({transaction: t})
+              .then(() => {
+                return Promise.all([
+                  models.PackagesMetrics.destroy({where: {package_id: v.get('id')},transaction: t}),
+                  models.PackagesDiff.destroy({where: {package_id: v.get('id')},transaction: t})
+                ]);
+              });
+          });
+        })
+    ]);
+  });
+}
